@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 
+<<<<<<< HEAD
 from aiogram import Bot
+=======
+from aiogram import Bot, Dispatcher
+>>>>>>> 4c2f3e7 (fix: resolve Enum/Postgres type errors, fix logger context, fix webhook startup sequence)
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import Update
@@ -40,6 +44,10 @@ async def handle_admin_webhook(request: web.Request) -> web.Response:
 async def handle_child_webhook(request: web.Request) -> web.Response:
     if not _check_secret(request):
         return web.Response(status=401)
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 4c2f3e7 (fix: resolve Enum/Postgres type errors, fix logger context, fix webhook startup sequence)
     try:
         db_bot_id = int(request.match_info["bot_id"])
     except ValueError:
@@ -60,10 +68,19 @@ async def healthcheck(_: web.Request) -> web.Response:
 
 async def on_startup(app: web.Application) -> None:
     setup_logging()
+<<<<<<< HEAD
     logger.info("Starting up: ensuring master admin bot row + webhook are registered")
 
     async with AsyncSessionFactory() as session:
         repo = BotRepository(session)
+=======
+    logger.info("Starting up: initializing system...")
+
+    async with AsyncSessionFactory() as session:
+        repo = BotRepository(session)
+        
+        # 1. Регистрация мастер-бота
+>>>>>>> 4c2f3e7 (fix: resolve Enum/Postgres type errors, fix logger context, fix webhook startup sequence)
         existing = await repo.get_by_token(settings.ADMIN_BOT_TOKEN)
         if existing is None:
             me = await admin_bot.get_me()
@@ -79,6 +96,7 @@ async def on_startup(app: web.Application) -> None:
             db_bot.config = BotConfig(bot_id=db_bot.id, welcome_caption="Admin bot", captcha_enabled=False)
             session.add(db_bot.config)
             await session.commit()
+<<<<<<< HEAD
             logger.info("Registered master admin bot row (id=%s, @%s)", db_bot.id, me.username)
 
         # Re-assert webhooks for every active bot on boot -- cheap, and
@@ -93,12 +111,36 @@ async def on_startup(app: web.Application) -> None:
             bot = await bot_manager.get(db_bot.id)
             if bot is None:
                 continue
+=======
+            logger.info("Registered master admin bot row (id=%s)", db_bot.id)
+
+        # 2. Инициализация всех активных ботов в bot_manager
+        child_bots = await repo.list_active_child_bots()
+        for db_bot in child_bots:
+            # Создаем и добавляем бота в менеджер, чтобы он был доступен
+            bot = Bot(token=db_bot.token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            await bot_manager.add(db_bot.id, bot)
+            
+            # 3. Установка вебхуков
+>>>>>>> 4c2f3e7 (fix: resolve Enum/Postgres type errors, fix logger context, fix webhook startup sequence)
             await bot.set_webhook(
                 url=f"{settings.BASE_WEBHOOK_URL}/webhook/{db_bot.id}",
                 secret_token=settings.WEBHOOK_SECRET,
                 allowed_updates=["message", "callback_query", "chat_join_request"],
             )
+<<<<<<< HEAD
     logger.info("Startup complete: %d child bot(s) online", len(child_bots))
+=======
+        
+        # Установка вебхука для админа
+        await admin_bot.set_webhook(
+            url=f"{settings.BASE_WEBHOOK_URL}/webhook/admin",
+            secret_token=settings.WEBHOOK_SECRET,
+            allowed_updates=["message", "callback_query"],
+        )
+
+    logger.info("Startup complete: %d child bot(s) initialized", len(child_bots))
+>>>>>>> 4c2f3e7 (fix: resolve Enum/Postgres type errors, fix logger context, fix webhook startup sequence)
 
 
 async def on_shutdown(app: web.Application) -> None:
