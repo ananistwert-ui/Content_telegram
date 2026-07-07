@@ -14,7 +14,8 @@ class BroadcastRepository(BaseRepository[Broadcast]):
 
     async def list_due(self, now: dt.datetime) -> list[Broadcast]:
         stmt = select(Broadcast).where(
-            Broadcast.status == BroadcastStatus.SCHEDULED,
+            # Исправление: добавляем .value
+            Broadcast.status == BroadcastStatus.SCHEDULED.value,
             Broadcast.scheduled_at <= now,
         )
         return list((await self.session.execute(stmt)).scalars().all())
@@ -26,7 +27,11 @@ class BroadcastJobRepository(BaseRepository[BroadcastJob]):
     async def list_pending(self, broadcast_id: int, limit: int = 500) -> list[BroadcastJob]:
         stmt = (
             select(BroadcastJob)
-            .where(BroadcastJob.broadcast_id == broadcast_id, BroadcastJob.status == BroadcastJobStatus.PENDING)
+            .where(
+                BroadcastJob.broadcast_id == broadcast_id, 
+                # Исправление: добавляем .value
+                BroadcastJob.status == BroadcastJobStatus.PENDING.value
+            )
             .limit(limit)
         )
         return list((await self.session.execute(stmt)).scalars().all())
@@ -37,6 +42,10 @@ class BroadcastJobRepository(BaseRepository[BroadcastJob]):
         stmt = (
             select(func.count())
             .select_from(BroadcastJob)
-            .where(BroadcastJob.broadcast_id == broadcast_id, BroadcastJob.status == status)
+            .where(
+                BroadcastJob.broadcast_id == broadcast_id, 
+                # Исправление: добавляем .value, так как status передается как Enum
+                BroadcastJob.status == status.value
+            )
         )
-        return (await self.session.execute(stmt)).scalar_one()
+        return (await self.session.execute(stmt)).scalar_one()ы

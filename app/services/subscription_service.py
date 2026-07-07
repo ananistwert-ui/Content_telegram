@@ -6,12 +6,12 @@ import logging
 from aiogram import Bot as AiogramBot
 from aiogram.exceptions import TelegramAPIError
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.analytics import UserSubscription
 from app.models.channel import Channel
-from app.models.enums import AnalyticsEventType
-from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,33 @@ class SubscriptionService:
             is_member = False
 
         await self.redis.set(cache_key, "1" if is_member else "0", ex=settings.SUBSCRIPTION_CHECK_CACHE_TTL)
+
+        # Best-effort durable write for analytics tracking
+        try:
+            users = UserRepository(self.session)
+            user = await users.get_by_tg_id(channel.bot_id, tg_user_id)
+            if user:
+                async with self.session.begin_nested():
+                    stmt = select(UserSubscription).where(
+                        UserSubscription.user_id == user.id,
+                        UserSubscription.channel_id == channel.id
+                    )
+                    sub_record = (await self.session.execute(stmt)).scalar_one_or_none()
+                    
+                    if sub_record:
+                        sub_record.is_subscribed = is_member
+                        sub_record.checked_at = dt.datetime.now(dt.timezone.utc)
+                    else:
+                        sub_record = UserSubscription(
+                            user_id=user.id,
+                            channel_id=channel.id,
+                            is_subscribed=is_member,
+                            checked_at=dt.datetime.now(dt.timezone.utc)
+                        )
+                        self.session.add(sub_record)
+        except Exception as e:
+            logger.error("Failed to record UserSubscription: %s", e)
+
         return is_member
 
     async def check_all(self, tg_user_id: int, channels: list[Channel]) -> dict[int, bool]:

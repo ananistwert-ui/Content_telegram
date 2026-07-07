@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from aiogram import Bot, Router
+from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.bot_manager import bot_manager
 from app.handlers.admin.filters import IsAdminFilter
 from app.handlers.admin.states import ChannelStates
 from app.models.channel import Channel
@@ -66,8 +67,6 @@ async def channel_delete(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer("Deleted.")
 
 
-# ---- Add-channel wizard: type -> label -> chat_id -> url ----
-
 @router.callback_query(lambda c: c.data and c.data.startswith("adm:channel_add:"))
 async def add_channel_start(call: CallbackQuery, state: FSMContext) -> None:
     bot_id = int(call.data.split(":")[-1])
@@ -114,21 +113,24 @@ async def add_channel_chat_id(message: Message, state: FSMContext) -> None:
 
 
 @router.message(ChannelStates.waiting_url)
-async def add_channel_url(message: Message, state: FSMContext, session: AsyncSession, bot: Bot) -> None:
+async def add_channel_url(message: Message, state: FSMContext, session: AsyncSession) -> None:
     url = None if message.text.strip() == "/skip" else message.text.strip()
     data = await state.get_data()
+    target_bot_id = data["target_bot_id"]
+    
+    child_bot = await bot_manager.get(target_bot_id)
 
     is_verified = False
-    if data["chat_id"] is not None:
+    if data["chat_id"] is not None and child_bot:
         try:
-            member = await bot.get_chat_member(chat_id=data["chat_id"], user_id=bot.id)
-            is_verified = member.status == "administrator"
+            member = await child_bot.get_chat_member(chat_id=data["chat_id"], user_id=child_bot.id)
+            is_verified = member.status in ("administrator", "creator")
         except Exception:
             is_verified = False
 
     repo = ChannelRepository(session)
     channel = Channel(
-        bot_id=data["target_bot_id"],
+        bot_id=target_bot_id,
         type=ChannelType(data["channel_type"]),
         label=data["label"],
         tg_chat_id=data["chat_id"],

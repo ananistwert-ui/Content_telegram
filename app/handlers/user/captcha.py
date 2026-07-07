@@ -44,6 +44,7 @@ async def on_captcha_answer(
         await analytics.log(bot_id=db_bot.id, user_id=user.id, event_type=AnalyticsEventType.CAPTCHA_PASSED)
         await call.message.delete()
         await send_welcome_and_menu(call.message, bot, session, db_bot.id, db_bot_config)
+        await analytics.log(bot_id=db_bot.id, user_id=user.id, event_type=AnalyticsEventType.MENU_SHOWN)
     else:
         user.captcha_attempts += 1
         await analytics.log(bot_id=db_bot.id, user_id=user.id, event_type=AnalyticsEventType.CAPTCHA_FAILED)

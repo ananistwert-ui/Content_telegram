@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from aiogram import Bot, Router
+from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.bot_manager import bot_manager
 from app.handlers.admin.filters import IsAdminFilter
 from app.handlers.admin.states import PrivateChannelStates
 from app.models.channel import ChannelRequirement, PrivateChannel
@@ -65,8 +66,6 @@ async def pc_delete(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer("Deleted.")
 
 
-# ---- Create wizard: title -> pick underlying PRIVATE channel -> auto invite link ----
-
 @router.callback_query(lambda c: c.data and c.data.startswith("adm:pc_add:"))
 async def pc_add_start(call: CallbackQuery, state: FSMContext) -> None:
     bot_id = int(call.data.split(":")[-1])
@@ -107,15 +106,21 @@ async def pc_add_title(message: Message, state: FSMContext, session: AsyncSessio
 
 
 @router.callback_query(PrivateChannelStates.waiting_channel_pick, lambda c: c.data and c.data.startswith("adm:pc_pick_channel:"))
-async def pc_pick_channel(call: CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot) -> None:
+async def pc_pick_channel(call: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     channel_id = int(call.data.split(":")[-1])
     ch_repo = ChannelRepository(session)
     channel = await ch_repo.get(channel_id)
     data = await state.get_data()
+    target_bot_id = data["target_bot_id"]
+    
+    child_bot = await bot_manager.get(target_bot_id)
+    if not child_bot:
+        await call.answer("Target bot not found or inactive.", show_alert=True)
+        return
 
     invite_link = None
     try:
-        link_obj = await bot.create_chat_invite_link(
+        link_obj = await child_bot.create_chat_invite_link(
             chat_id=channel.tg_chat_id,
             name=data["title"][:32],
             creates_join_request=True,
@@ -124,14 +129,14 @@ async def pc_pick_channel(call: CallbackQuery, state: FSMContext, session: Async
     except TelegramAPIError as exc:
         await call.message.edit_text(
             f"⚠️ Could not create a join-request invite link: {exc}\n"
-            "Make sure the bot is an admin in that channel with invite permissions, then try again."
+            "Make sure the child bot is an admin in that channel with invite permissions, then try again."
         )
         await call.answer()
         return
 
     pc_repo = PrivateChannelRepository(session)
     pc = PrivateChannel(
-        bot_id=data["target_bot_id"],
+        bot_id=target_bot_id,
         channel_id=channel.id,
         title=data["title"],
         invite_link=invite_link,
@@ -141,8 +146,6 @@ async def pc_pick_channel(call: CallbackQuery, state: FSMContext, session: Async
     await call.message.edit_text(f"✅ Private channel \"{pc.title}\" created with a join-request invite link.")
     await call.answer()
 
-
-# ---- Requirements multi-select toggle ----
 
 @router.callback_query(lambda c: c.data and c.data.startswith("adm:pc_reqs:"))
 async def pc_reqs_menu(call: CallbackQuery, session: AsyncSession) -> None:

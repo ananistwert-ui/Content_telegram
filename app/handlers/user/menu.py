@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.builders import build_private_channels_keyboard
 from app.models.bot import Bot as BotModel
-from app.repositories.user_repository import UserRepository
 from app.services.private_channel_service import PrivateChannelService
 from app.services.subscription_service import SubscriptionService
 

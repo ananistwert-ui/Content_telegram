@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from aiogram import Bot, F, Router
+from aiogram import Bot, Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 from redis.asyncio import Redis
@@ -46,6 +46,7 @@ async def cmd_start(
         return
 
     await send_welcome_and_menu(message, bot, session, db_bot.id, db_bot_config)
+    await analytics.log(bot_id=db_bot.id, user_id=user.id, event_type=AnalyticsEventType.MENU_SHOWN)
 
 
 async def send_captcha(message: Message, bot: Bot, bot_id: int, config: BotConfig) -> None:

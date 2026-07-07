@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiogram import Bot, Router
+from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,16 +74,13 @@ async def receive_caption(message: Message, state: FSMContext, session: AsyncSes
     bot_id = data["target_bot_id"]
     repo = BotConfigRepository(session)
     config = await repo.get_by_bot_id(bot_id)
-    # message.html_text preserves the formatting entities the admin sent
-    # (bold/italic/spoiler/custom emoji/etc) as Telegram-native HTML,
-    # which is exactly what we store and later re-send verbatim.
     config.welcome_caption = message.html_text
     await state.clear()
     await message.answer("✅ Welcome caption updated.")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("adm:welcome_preview:"))
-async def preview(call: CallbackQuery, bot: Bot, session: AsyncSession) -> None:
+async def preview(call: CallbackQuery, session: AsyncSession) -> None:
     bot_id = int(call.data.split(":")[-1])
     repo = BotConfigRepository(session)
     config = await repo.get_by_bot_id(bot_id)
